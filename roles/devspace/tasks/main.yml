@@ -55,13 +55,14 @@
   vars:
     config_content: "{{ item.content | b64decode | default('') }}"
     port_match: "{{ config_content | regex_search('bind-addr: 0\\.0\\.0\\.0:(\\d+)') }}"
+    user_label: "{{ item.item | default('unknown') }}"
   when:
     - existing_configs.results is defined
     - item.content is defined
     - port_match is not none
     - port_match != ""
   loop_control:
-    label: "{{ existing_service_users[loop.index0] }}"
+    label: "{{ user_label }}"
 
 - name: Set empty list if no existing ports found
   ansible.builtin.set_fact:
@@ -320,7 +321,11 @@
     name: "{{ ansible_image }}"
     username: "{{ registry_user }}"
     password: "{{ registry_pass }}"
-  when: additionalimagestores is not defined
+  when:
+    - additionalimagestores is not defined
+    - ansible_image is defined and ansible_image is not none
+    - registry_user is defined and registry_user is not none
+    - registry_pass is defined and registry_pass is not none
 
 - name: Pull example repository
   become: true

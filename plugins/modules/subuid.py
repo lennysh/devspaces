@@ -51,17 +51,17 @@ import os
 SUBID_MIN = 100000
 
 def run(module, result):
-    if module._name == 'subuid':
+    # This module handles subuid, so it should have 'user' parameter
+    if 'user' in module.params and module.params['user'] is not None:
         name = module.params['user']
-    elif module._name == 'subgid':
-        name = module.params['group']
+        module_type = 'subuid'
     else:
-        module.fail_json(msg='unimplemented', **result)
+        module.fail_json(msg='user parameter is required for subuid module', **result)
 
     data = []
     found_at_index = None # index is line number -1
 
-    subid_file = '/etc/{}'.format(module._name)
+    subid_file = '/etc/{}'.format(module_type)
     if os.path.exists(subid_file):
         with open(subid_file) as f:
             index = 0
