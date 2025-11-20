@@ -46,7 +46,9 @@ None
 
 ## License
 
-GPL-2.0-or-later
+GPL-3.0-or-later
+
+See the [LICENSE](../../LICENSE) file for the full text of the GNU General Public License version 3.
 
 ## Credits
 

@@ -2,7 +2,7 @@
 galaxy_info:
   author: lennysh
   description: Installs code-server (VS Code Server) system-wide on the target host
-  license: GPL-2.0-or-later
+  license: GPL-3.0-or-later
   min_ansible_version: "2.9"
   platforms:
     - name: EL
