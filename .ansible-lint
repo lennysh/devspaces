@@ -25,7 +25,7 @@ mock_modules:
   - community
   - lennysh
   - containers
-  - ansible.posix
+  - posix
 # mock_roles:
 #   - mocked_role
 #   - author.role_name # old standalone galaxy role
