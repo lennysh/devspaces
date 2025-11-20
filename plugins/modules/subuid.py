@@ -61,6 +61,7 @@ EXAMPLES = r'''
     state: present
     start: 200000
     count: 65536
+...
 '''
 
 from ansible.module_utils.basic import AnsibleModule
