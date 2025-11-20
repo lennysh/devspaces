@@ -359,12 +359,24 @@
     mode: "0644"
   when: deploy_ansiblegalaxy_repo and example_role_exists.stat.exists
 
+- name: Check if firewalld service exists
+  ansible.builtin.stat:
+    path: /usr/lib/systemd/system/firewalld.service
+  register: firewalld_service
+
 - name: Open up correct port
   ansible.posix.firewalld:
     port: "{{ dev_server_port }}/tcp"
     permanent: true
     state: enabled
   notify: Restart_firewalld
+  when: firewalld_service.stat.exists
+  failed_when: false
+
+- name: Warn if firewalld is not available
+  ansible.builtin.debug:
+    msg: "firewalld service not found. Port {{ dev_server_port }} may need to be opened manually using your firewall management tool."
+  when: not firewalld_service.stat.exists
 
 - name: Check if user is lingering
   ansible.builtin.stat:
