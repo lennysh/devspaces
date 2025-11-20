@@ -11,7 +11,7 @@ repos:
         args: [--markdown-linebreak-ext=md]
       - id: end-of-file-fixer
       - id: check-yaml
-        args: [--unsafe]  # Allow custom YAML tags for Ansible
+        args: [--unsafe] # Allow custom YAML tags for Ansible
       - id: check-added-large-files
         args: [--maxkb=500]
       - id: check-merge-conflict
@@ -45,7 +45,8 @@ repos:
     hooks:
       - id: ansible-lint
         args: [--write]
-        files: (^playbooks/.*\.ya?ml$|^roles/.*/tasks/.*\.ya?ml$|^roles/.*/handlers/.*\.ya?ml$|^roles/.*/meta/.*\.ya?ml$|^roles/.*/defaults/.*\.ya?ml$|^roles/.*/vars/.*\.ya?ml$)
+        files:
+          (^playbooks/.*\.ya?ml$|^roles/.*/tasks/.*\.ya?ml$|^roles/.*/handlers/.*\.ya?ml$|^roles/.*/meta/.*\.ya?ml$|^roles/.*/defaults/.*\.ya?ml$|^roles/.*/vars/.*\.ya?ml$)
         exclude: |
           (?x)^(
             changelogs/.*\.yaml$|
@@ -93,4 +94,4 @@ repos:
     hooks:
       - id: shellcheck
         files: \.(sh|bash)$
-
+...

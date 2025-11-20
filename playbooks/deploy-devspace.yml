@@ -31,15 +31,15 @@
   become: true
   vars:
     # REQUIRED: Username to configure devspace for
-    username: null
+    username:
 
     # OPTIONAL: Password for code-server authentication
     # If not set, authentication will be disabled
-    code_server_pass: null
+    code_server_pass:
 
     # OPTIONAL: Specific port for code-server
     # If null, automatically assigns next available port
-    dev_server_port: null
+    dev_server_port:
 
     # OPTIONAL: Port range for automatic port assignment
     port_range_start: 8080
@@ -111,3 +111,4 @@
           - "=========================================="
           - "Note: If using a password, use: {{ code_server_pass | default('No password set - authentication disabled') }}"
           - "=========================================="
+...

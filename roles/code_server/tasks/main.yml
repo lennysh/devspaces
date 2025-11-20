@@ -15,7 +15,8 @@
 
 # Check if code-server is already installed
 - name: Check if code-server is already installed
-  ansible.builtin.command: rpm -q code-server
+  ansible.builtin.stat:
+    path: /usr/bin/code-server
   register: code_server_installed
   changed_when: false
   failed_when: false
@@ -26,7 +27,7 @@
     url: "{{ codeserver_url }}"
     dest: /tmp/code-server.rpm
     mode: "0440"
-  when: code_server_installed.rc != 0
+  when: not code_server_installed.stat.exists
 
 # Install Code Server
 - name: Install Code Server
@@ -34,17 +35,18 @@
     name: /tmp/code-server.rpm
     state: present
     disable_gpg_check: true
-  when: code_server_installed.rc != 0
+  when: not code_server_installed.stat.exists
 
 - name: Verify code-server installation
-  ansible.builtin.command: which code-server
+  ansible.builtin.stat:
+    path: /usr/bin/code-server
   register: code_server_path
   changed_when: false
-  failed_when: code_server_path.rc != 0
+  failed_when: not code_server_path.stat.exists
 
 - name: Display code-server installation info
   ansible.builtin.debug:
-    msg: "code-server is installed at {{ code_server_path.stdout }}"
+    msg: "code-server is installed at /usr/bin/code-server"
 
 # Install system-wide dependencies required for devspaces
 - name: Install podman and git and python 3.11
@@ -57,3 +59,4 @@
       - python3-firewall
     state: present
 
+...

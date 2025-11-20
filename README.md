@@ -4,7 +4,7 @@ This collection provides roles for setting up development environments using cod
 
 ## Collection Requirements
 
-- Ansible >= 2.9.10
+- Ansible >= 2.15.0
 - Python >= 3.8
 - RHEL/CentOS/Fedora (uses dnf package manager)
 - Root or sudo access

@@ -20,7 +20,7 @@
     # Code-server version to install
     # Options: "latest" (auto-detect) or specific version like "4.20.0"
     code_server_version: "latest"
-  
+
   roles:
     - role: lennysh.devspaces.code_server
       vars:
@@ -34,3 +34,4 @@
           - "Installed packages: code-server, podman, git, python3.11, python3.11-pip"
           - "Next step: Run deploy-devspace.yml to configure a user devspace"
 
+...
