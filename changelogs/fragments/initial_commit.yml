@@ -1,0 +1,5 @@
+---
+major_changes:
+- Initial commit of the lennysh-devspaces collection.
+- Added the `code_server` role to install code-server.
+- Added the `devspace` role to configure a development environment.
