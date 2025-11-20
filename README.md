@@ -1,5 +1,7 @@
 # Ansible Collection - lennysh.devspaces
 
+[![GitHub last commit](https://img.shields.io/github/last-commit/lennysh/devspaces.svg)](https://github.com/lennysh/devspaces/commits/main) [![GitHub license](https://img.shields.io/github/license/lennysh/devspaces.svg)](https://github.com/lennysh/devspaces/blob/main/LICENSE) [![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/lennysh/devspaces/pulls) ![GitHub contributors](https://img.shields.io/github/contributors/lennysh/devspaces) ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/lennysh/devspaces/tests.yml) ![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/lennysh/devspaces)
+
 This collection provides roles for setting up development environments using code-server (VS Code in the browser) with Ansible development tools.
 
 ## Collection Requirements
