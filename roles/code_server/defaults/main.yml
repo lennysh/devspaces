@@ -1,0 +1,10 @@
+---
+# Code-server version to install
+version: latest
+
+# Code-server download URL (will be constructed from version)
+codeserver_url: https://github.com/coder/code-server/releases/download/v{{ version }}/code-server-{{ version }}-amd64.rpm
+
+# GitHub API headers for authentication (optional)
+_github_api_headers: "{{ {'GITHUB_TOKEN': lookup('ansible.builtin.env', 'GITHUB_TOKEN')} if (lookup('ansible.builtin.env', 'GITHUB_TOKEN')) else {} }}"
+

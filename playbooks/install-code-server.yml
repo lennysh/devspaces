@@ -1,0 +1,36 @@
+---
+# Playbook: Install or Update code-server
+#
+# This playbook installs code-server (VS Code Server) system-wide on target hosts.
+# It also installs system-wide dependencies: podman, git, python3.11, and python3.11-pip.
+#
+# Usage:
+#   ansible-playbook -i inventory playbooks/install-code-server.yml
+#
+#   To specify a version:
+#   ansible-playbook -i inventory playbooks/install-code-server.yml -e "code_server_version=4.20.0"
+#
+#   To use latest version (default):
+#   ansible-playbook -i inventory playbooks/install-code-server.yml -e "code_server_version=latest"
+
+- name: Install or Update code-server
+  hosts: all
+  become: true
+  vars:
+    # Code-server version to install
+    # Options: "latest" (auto-detect) or specific version like "4.20.0"
+    code_server_version: "latest"
+  
+  roles:
+    - role: lennysh.devspaces.code_server
+      vars:
+        version: "{{ code_server_version }}"
+
+  post_tasks:
+    - name: Display installation summary
+      ansible.builtin.debug:
+        msg:
+          - "code-server installation completed"
+          - "Installed packages: code-server, podman, git, python3.11, python3.11-pip"
+          - "Next step: Run deploy-devspace.yml to configure a user devspace"
+

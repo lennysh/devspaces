@@ -1,0 +1,16 @@
+---
+# User configuration
+username: null
+code_server_pass: null
+
+# Port configuration - if dev_server_port is not set, will auto-assign next available port
+dev_server_port: null
+
+# Port range for automatic port assignment
+port_range_start: 8080
+port_range_end: 8099
+
+# Deployment options
+deploy_inventory: true
+deploy_example_repo: true
+deploy_ansiblegalaxy_repo: false

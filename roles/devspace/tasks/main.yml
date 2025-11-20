@@ -1,0 +1,376 @@
+---
+- name: Fail if username is not defined
+  ansible.builtin.fail:
+    msg: "username must be defined"
+  when: username is not defined or username is none
+
+- name: Fail if code_server_pass is not defined
+  ansible.builtin.fail:
+    msg: "code_server_pass must be defined"
+  when: code_server_pass is not defined or code_server_pass is none
+
+# Verify code-server is installed
+- name: Check if code-server is installed
+  ansible.builtin.command: which code-server
+  register: code_server_check
+  changed_when: false
+  failed_when: false
+
+- name: Fail if code-server is not installed
+  ansible.builtin.fail:
+    msg: "code-server is not installed. Please run the lennysh.devspaces.code_server role first."
+  when: code_server_check.rc != 0
+
+# Discover existing code-server services and their ports
+- name: Get existing code-server systemd services
+  ansible.builtin.shell: |
+    set -o pipefail
+    systemctl list-units --type=service --all --no-pager | grep -E 'code-server@' | awk '{print $1}' || true
+  register: existing_services
+  changed_when: false
+
+- name: Extract usernames from existing services
+  ansible.builtin.set_fact:
+    existing_service_users: "{{ existing_services.stdout_lines | map('regex_replace', 'code-server@(.+)\\.service', '\\1') | list }}"
+  when: existing_services.stdout_lines | length > 0
+
+- name: Set empty list if no existing services
+  ansible.builtin.set_fact:
+    existing_service_users: []
+  when: existing_services.stdout_lines | length == 0
+
+- name: Read existing code-server config files to find ports
+  ansible.builtin.slurp:
+    src: "/home/{{ item }}/.config/code-server/config.yaml"
+  register: existing_configs
+  loop: "{{ existing_service_users }}"
+  when: existing_service_users | length > 0
+  failed_when: false
+  changed_when: false
+
+- name: Extract ports from existing configs
+  ansible.builtin.set_fact:
+    existing_ports: "{{ existing_ports | default([]) + [item.content | b64decode | regex_search('bind-addr: 0\\.0\\.0\\.0:(\\d+)', '\\1') | int] }}"
+  loop: "{{ existing_configs.results | default([]) }}"
+  vars:
+    config_content: "{{ item.content | b64decode | default('') }}"
+    port_match: "{{ config_content | regex_search('bind-addr: 0\\.0\\.0\\.0:(\\d+)') }}"
+  when:
+    - existing_configs.results is defined
+    - item.content is defined
+    - port_match is not none
+    - port_match != ""
+  loop_control:
+    label: "{{ existing_service_users[loop.index0] }}"
+
+- name: Set empty list if no existing ports found
+  ansible.builtin.set_fact:
+    existing_ports: []
+  when: existing_ports is not defined
+
+# Check if current user already has a service and get their port
+- name: Check if user already has a service
+  ansible.builtin.stat:
+    path: /etc/systemd/system/code-server@{{ username }}.service
+  register: user_service_exists
+
+- name: Get existing port for user if service exists
+  ansible.builtin.slurp:
+    src: "/home/{{ username }}/.config/code-server/config.yaml"
+  register: user_existing_config
+  when: user_service_exists.stat.exists
+  failed_when: false
+  changed_when: false
+
+- name: Extract existing port for user
+  ansible.builtin.set_fact:
+    user_existing_port: "{{ (user_existing_config.content | b64decode | regex_search('bind-addr: 0\\.0\\.0\\.0:(\\d+)', '\\1') | first | int) }}"
+  vars:
+    config_content: "{{ user_existing_config.content | b64decode | default('') }}"
+    port_match: "{{ config_content | regex_search('bind-addr: 0\\.0\\.0\\.0:(\\d+)') }}"
+  when:
+    - user_service_exists.stat.exists
+    - user_existing_config.content is defined
+    - port_match is not none
+    - port_match != ""
+
+# Calculate port for user
+- name: Set port from existing service if available
+  ansible.builtin.set_fact:
+    dev_server_port: "{{ user_existing_port }}"
+  when:
+    - user_service_exists.stat.exists
+    - user_existing_port is defined
+
+- name: Use provided port if set
+  ansible.builtin.set_fact:
+    dev_server_port: "{{ dev_server_port }}"
+  when: dev_server_port is defined and dev_server_port is not none
+
+- name: Calculate next available port
+  ansible.builtin.set_fact:
+    dev_server_port: "{{ (existing_ports | default([]) | max | default(port_range_start - 1) | int) + 1 }}"
+  when: dev_server_port is not defined or dev_server_port is none
+
+- name: Fail if port range exhausted
+  ansible.builtin.fail:
+    msg: "Port range {{ port_range_start }}-{{ port_range_end }} is exhausted. Cannot assign port {{ dev_server_port }} to user {{ username }}"
+  when: dev_server_port | int > port_range_end | int
+
+- name: Fail if port is below range
+  ansible.builtin.fail:
+    msg: "Port {{ dev_server_port }} is below the allowed range {{ port_range_start }}-{{ port_range_end }}"
+  when: dev_server_port | int < port_range_start | int
+
+# Ensure certs directory exists (shared across all users)
+- name: Ensure certs directory exists
+  ansible.builtin.file:
+    path: "{{ certandkeydestfolder }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0741"
+  when: cert_name is defined
+
+- name: Copy Cert
+  ansible.builtin.copy:
+    src: "{{ certandkeysourcefolder }}{{ cert_name }}"
+    dest: "{{ certandkeydestfolder }}{{ cert_name }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  when: cert_name is defined
+
+- name: Copy Key
+  ansible.builtin.copy:
+    src: "{{ certandkeysourcefolder }}{{ key_name }}"
+    dest: "{{ certandkeydestfolder }}{{ key_name }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  when: key_name is defined
+
+# Per-user tasks
+- name: Apply our systemd service file
+  ansible.builtin.template:
+    src: code-server.service.j2
+    dest: /etc/systemd/system/code-server@{{ username }}.service
+    owner: "{{ username }}"
+    group: wheel
+    mode: "0744"
+  notify: Restart_Codeserver
+
+- name: Ensure custom facts directory exists
+  ansible.builtin.file:
+    path: /home/{{ username }}/.local/share/code-server/User/
+    recurse: true
+    state: directory
+    owner: "{{ username }}"
+
+- name: Ensure settings directory exists
+  ansible.builtin.file:
+    path: /home/{{ username }}/.config/code-server/
+    recurse: true
+    state: directory
+    owner: "{{ username }}"
+
+- name: Ensure podman config location exists
+  ansible.builtin.file:
+    path: /home/{{ username }}/.config/containers/
+    recurse: true
+    state: directory
+    owner: "{{ username }}"
+  when: additionalimagestores is defined
+
+- name: Ensure ansible directory exists
+  ansible.builtin.file:
+    path: /home/{{ username }}/ansible/localplaybooks/
+    recurse: true
+    state: directory
+    owner: "{{ username }}"
+
+- name: Ensure ansible group vars folder exists
+  ansible.builtin.file:
+    path: /home/{{ username }}/ansible/group_vars/
+    recurse: true
+    state: directory
+    owner: "{{ username }}"
+  when: deploy_inventory
+
+- name: Ensure ansible host vars folder exists
+  ansible.builtin.file:
+    path: /home/{{ username }}/ansible/host_vars/
+    recurse: true
+    state: directory
+    owner: "{{ username }}"
+  when: deploy_inventory
+
+- name: Apply code server defaults
+  ansible.builtin.template:
+    src: settings.json.j2
+    dest: /home/{{ username }}/.local/share/code-server/User/settings.json
+    owner: "{{ username }}"
+    mode: "0644"
+
+- name: Ensure bashrc is set for user
+  ansible.builtin.template:
+    src: .bashrc.j2
+    dest: /home/{{ username }}/.bashrc
+    owner: "{{ username }}"
+    mode: "0644"
+
+- name: Apply code server settings
+  ansible.builtin.template:
+    src: config.yml.j2
+    dest: /home/{{ username }}/.config/code-server/config.yaml
+    owner: "{{ username }}"
+    mode: "0644"
+  notify: Restart_Codeserver
+
+- name: Deploy ansible-navigator config
+  ansible.builtin.template:
+    src: ansible-navigator.yml.j2
+    dest: /home/{{ username }}/ansible/ansible-navigator.yml
+    owner: "{{ username }}"
+    mode: "0644"
+
+- name: Deploy inventory
+  ansible.builtin.copy:
+    src: inventory
+    dest: /home/{{ username }}/ansible/inventory
+    owner: "{{ username }}"
+    mode: "0644"
+  when: deploy_inventory
+
+- name: Deploy ansible group vars folder
+  ansible.builtin.copy:
+    src: files/group_vars/
+    dest: /home/{{ username }}/ansible/group_vars/
+    owner: "{{ username }}"
+    mode: "0644"
+  when: deploy_inventory
+
+- name: Deploy ansible host vars folder
+  ansible.builtin.copy:
+    src: files/host_vars/
+    dest: /home/{{ username }}/ansible/host_vars/
+    owner: "{{ username }}"
+    mode: "0644"
+  when: deploy_inventory
+
+- name: Install ansible extension
+  become_user: "{{ username }}"
+  become: true
+  ansible.builtin.command: /bin/code-server --install-extension redhat.ansible --install-extension redhat.vscode-redhat-account
+  register: result
+  changed_when: "'was successfully installed' in result.stdout"
+
+- name: Allow code-server to listen on port 443
+  community.general.capabilities:
+    path: /usr/lib/code-server/lib/node
+    capability: cap_net_bind_service=+ep
+    state: present
+  when: dev_server_port == 443
+
+- name: Daemon-reload, enable and start code-server
+  ansible.builtin.systemd:
+    name: code-server@{{ username }}
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Setup shared storage for podman images
+  ansible.builtin.template:
+    src: storage.conf.j2
+    dest: /home/{{ username }}/.config/containers/storage.conf
+    owner: "{{ username }}"
+    mode: "0644"
+  when: additionalimagestores is defined
+
+# ansible-dev tools includes ansible-builder, ansible-core, ansible-creator, ansible-dev-environment, ansible-lint
+# ansible-navigator, ansible-sign, molecule, pytest-ansible, tox-ansible
+- name: Install ansible-dev-tools
+  become_user: "{{ username }}"
+  become: true
+  ansible.builtin.pip:
+    name: ansible-dev-tools
+    state: present
+    extra_args: --user
+    executable: pip3.11
+
+- name: Allocate subuids for user
+  lennysh.devspaces.subuid:
+    user: "{{ username }}"
+  register: subuids
+
+- name: Allocate subgids for user
+  lennysh.devspaces.subgid:
+    group: "{{ username }}"
+  register: subgids
+
+- name: Ensure changes are applied to podman
+  ansible.builtin.command: podman system migrate
+  changed_when: false
+  when: subuids is changed or subgids is changed
+
+- name: Pull EE
+  become: true
+  become_user: "{{ username }}"
+  containers.podman.podman_image:
+    name: "{{ ansible_image }}"
+    username: "{{ registry_user }}"
+    password: "{{ registry_pass }}"
+  when: additionalimagestores is not defined
+
+- name: Pull example repository
+  become: true
+  become_user: "{{ username }}"
+  ansible.builtin.git:
+    repo: https://github.com/shadowman-lab/Ansible-Example.git
+    dest: /home/{{ username }}/ansible/ansible-example
+    version: main
+  when: deploy_example_repo
+
+- name: Check if example role structure exists
+  ansible.builtin.stat:
+    path: /tmp/ansible-example
+  register: example_role_exists
+  delegate_to: localhost
+  when: deploy_ansiblegalaxy_repo
+
+- name: Create an example role structure using ansible-galaxy
+  ansible.builtin.command:
+    cmd: ansible-galaxy init ansible-example
+    chdir: /tmp/
+    creates: /tmp/ansible-example
+  delegate_to: localhost
+  when: deploy_ansiblegalaxy_repo
+
+- name: Copy Example Structure to VM
+  ansible.builtin.copy:
+    src: /tmp/ansible-example/
+    dest: /home/{{ username }}/ansible/ansible-example
+    owner: "{{ username }}"
+    mode: "0644"
+  when: deploy_ansiblegalaxy_repo and example_role_exists.stat.exists
+
+- name: Open up correct port
+  ansible.posix.firewalld:
+    port: "{{ dev_server_port }}/tcp"
+    permanent: true
+    state: enabled
+  notify: Restart_firewalld
+
+- name: Check if user is lingering
+  ansible.builtin.stat:
+    path: /var/lib/systemd/linger/{{ username }}
+  register: user_lingering
+
+- name: Enable lingering is needed
+  ansible.builtin.command: loginctl enable-linger {{ username }}
+  changed_when: true
+  when: not user_lingering.stat.exists
+
+- name: Display Weblink
+  ansible.builtin.debug:
+    msg: https://{{ inventory_hostname }}:{{ dev_server_port }}/?folder=/home/{{ username }}/ansible

@@ -1,0 +1,58 @@
+---
+# Discover latest version of code-server
+- name: Discover latest version of code-server
+  ansible.builtin.set_fact:
+    version: >-
+      {{
+        (lookup('url', 'https://api.github.com/repos/coder/code-server/releases/latest',
+                headers=_github_api_headers, split_lines=False) | from_json).get('tag_name')
+        | replace('v', '')
+      }}
+  run_once: true
+  until: version is version('0.0.0', '>=')
+  retries: 10
+  when: version == "latest"
+
+# Check if code-server is already installed
+- name: Check if code-server is already installed
+  ansible.builtin.command: rpm -q code-server
+  register: code_server_installed
+  changed_when: false
+  failed_when: false
+
+# Download code-server
+- name: Download code-server
+  ansible.builtin.get_url:
+    url: "{{ codeserver_url }}"
+    dest: /tmp/code-server.rpm
+    mode: "0440"
+  when: code_server_installed.rc != 0
+
+# Install Code Server
+- name: Install Code Server
+  ansible.builtin.dnf:
+    name: /tmp/code-server.rpm
+    state: present
+    disable_gpg_check: true
+  when: code_server_installed.rc != 0
+
+- name: Verify code-server installation
+  ansible.builtin.command: which code-server
+  register: code_server_path
+  changed_when: false
+  failed_when: code_server_path.rc != 0
+
+- name: Display code-server installation info
+  ansible.builtin.debug:
+    msg: "code-server is installed at {{ code_server_path.stdout }}"
+
+# Install system-wide dependencies required for devspaces
+- name: Install podman and git and python 3.11
+  ansible.builtin.dnf:
+    name:
+      - podman
+      - git
+      - python3.11
+      - python3.11-pip
+    state: present
+
