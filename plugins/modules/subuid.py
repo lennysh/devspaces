@@ -42,6 +42,24 @@ options:
 
 author:
     - Shane McDonald (@shanemcd)
+
+examples:
+    - name: Add user to /etc/subuid
+      lennysh.devspaces.subuid:
+        user: alice
+        state: present
+
+    - name: Remove user from /etc/subuid
+      lennysh.devspaces.subuid:
+        user: alice
+        state: absent
+
+    - name: Add user with specific start UID
+      lennysh.devspaces.subuid:
+        user: bob
+        state: present
+        start: 200000
+        count: 65536
 '''
 
 from ansible.module_utils.basic import AnsibleModule
@@ -49,6 +67,7 @@ import tempfile
 import os
 
 SUBID_MIN = 100000
+
 
 def run(module, result):
     # This module handles subuid, so it should have 'user' parameter
@@ -59,7 +78,7 @@ def run(module, result):
         module.fail_json(msg='user parameter is required for subuid module', **result)
 
     data = []
-    found_at_index = None # index is line number -1
+    found_at_index = None  # index is line number -1
 
     subid_file = '/etc/{}'.format(module_type)
     if os.path.exists(subid_file):
@@ -143,7 +162,7 @@ def run(module, result):
 def run_module():
     module_args = dict(
         user=dict(type='str', required=True),
-        state=dict(type='str', required=False, default='present'),
+        state=dict(type='str', required=False, default='present', choices=['present', 'absent']),
         start=dict(type='int', required=False),
         count=dict(type='int', required=False, default=65536)
     )

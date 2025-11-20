@@ -42,6 +42,24 @@ options:
 
 author:
     - Shane McDonald (@shanemcd)
+
+examples:
+    - name: Add group to /etc/subgid
+      lennysh.devspaces.subgid:
+        group: alice
+        state: present
+
+    - name: Remove group from /etc/subgid
+      lennysh.devspaces.subgid:
+        group: alice
+        state: absent
+
+    - name: Add group with specific start GID
+      lennysh.devspaces.subgid:
+        group: bob
+        state: present
+        start: 200000
+        count: 65536
 '''
 
 from ansible.module_utils.basic import AnsibleModule
@@ -49,6 +67,7 @@ import tempfile
 import os
 
 SUBID_MIN = 100000
+
 
 def run(module, result):
     # This module handles subgid, so it should have 'group' parameter
@@ -59,7 +78,7 @@ def run(module, result):
         module.fail_json(msg='group parameter is required for subgid module', **result)
 
     data = []
-    found_at_index = None # index is line number -1
+    found_at_index = None  # index is line number -1
 
     subid_file = '/etc/{}'.format(module_type)
     if os.path.exists(subid_file):
@@ -143,7 +162,7 @@ def run(module, result):
 def run_module():
     module_args = dict(
         group=dict(type='str', required=True),
-        state=dict(type='str', required=False, default='present'),
+        state=dict(type='str', required=False, default='present', choices=['present', 'absent']),
         start=dict(type='int', required=False),
         count=dict(type='int', required=False, default=65536)
     )

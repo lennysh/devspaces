@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 if [ -z "$(ls changelogs/fragments/*.yml changelogs/fragments/*.yaml)" ]; then
   echo "change_present=false" >> "$GITHUB_OUTPUT"
 else
