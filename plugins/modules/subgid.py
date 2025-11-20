@@ -42,24 +42,25 @@ options:
 
 author:
     - Shane McDonald (@shanemcd)
+'''
 
-examples:
-    - name: Add group to /etc/subgid
-      lennysh.devspaces.subgid:
-        group: alice
-        state: present
+EXAMPLES = r'''
+- name: Add group to /etc/subgid
+  lennysh.devspaces.subgid:
+    group: alice
+    state: present
 
-    - name: Remove group from /etc/subgid
-      lennysh.devspaces.subgid:
-        group: alice
-        state: absent
+- name: Remove group from /etc/subgid
+  lennysh.devspaces.subgid:
+    group: alice
+    state: absent
 
-    - name: Add group with specific start GID
-      lennysh.devspaces.subgid:
-        group: bob
-        state: present
-        start: 200000
-        count: 65536
+- name: Add group with specific start GID
+  lennysh.devspaces.subgid:
+    group: bob
+    state: present
+    start: 200000
+    count: 65536
 '''
 
 from ansible.module_utils.basic import AnsibleModule

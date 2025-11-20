@@ -42,24 +42,25 @@ options:
 
 author:
     - Shane McDonald (@shanemcd)
+'''
 
-examples:
-    - name: Add user to /etc/subuid
-      lennysh.devspaces.subuid:
-        user: alice
-        state: present
+EXAMPLES = r'''
+- name: Add user to /etc/subuid
+  lennysh.devspaces.subuid:
+    user: alice
+    state: present
 
-    - name: Remove user from /etc/subuid
-      lennysh.devspaces.subuid:
-        user: alice
-        state: absent
+- name: Remove user from /etc/subuid
+  lennysh.devspaces.subuid:
+    user: alice
+    state: absent
 
-    - name: Add user with specific start UID
-      lennysh.devspaces.subuid:
-        user: bob
-        state: present
-        start: 200000
-        count: 65536
+- name: Add user with specific start UID
+  lennysh.devspaces.subuid:
+    user: bob
+    state: present
+    start: 200000
+    count: 65536
 '''
 
 from ansible.module_utils.basic import AnsibleModule
