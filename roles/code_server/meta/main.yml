@@ -1,0 +1,25 @@
+---
+galaxy_info:
+  author: lennysh
+  description: Installs code-server (VS Code Server) system-wide on the target host
+  license: GPL-2.0-or-later
+  min_ansible_version: "2.9"
+  platforms:
+    - name: EL
+      versions:
+        - all
+    - name: Fedora
+      versions:
+        - all
+  galaxy_tags:
+    - codeserver
+    - vscode
+    - development
+    - devspace
+
+dependencies: []
+
+# Credits
+# This role was inspired by and started with code from
+# shadowman-lab/Ansible-Development by Alex Dworjan
+# https://github.com/shadowman-lab/Ansible-Development

@@ -86,6 +86,10 @@ The role will display the full URL at the end of execution.
 
 GPL-2.0-or-later
 
+## Credits
+
+This role was inspired by and started with code from [shadowman-lab/Ansible-Development](https://github.com/shadowman-lab/Ansible-Development) by Alex Dworjan.
+
 ## Author Information
 
 This role is part of the lennysh.devspaces collection.

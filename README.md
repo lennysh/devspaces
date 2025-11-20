@@ -171,6 +171,10 @@ The role will display the full URL at the end of execution.
 
 GPL-2.0-or-later
 
+## Credits
+
+This collection was inspired by and started with code from [shadowman-lab/Ansible-Development](https://github.com/shadowman-lab/Ansible-Development) by Alex Dworjan. The original repository provided the foundation for setting up Ansible development environments with code-server.
+
 ## Author Information
 
 This collection is maintained by lennysh.
