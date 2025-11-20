@@ -1,4 +1,3 @@
 # This file contains ignores rule violations for ansible-lint
-playbooks/deploy-devspace.yml syntax-check[specific]
-playbooks/install-code-server.yml syntax-check[specific]
-roles/devspace/meta/main.yml syntax-check[specific]
+# Note: playbooks and roles/devspace/meta/main.yml are excluded in .ansible-lint exclude_paths
+# to avoid syntax-check errors for collection roles that aren't available until the collection is built

@@ -14,6 +14,8 @@ exclude_paths:
   - changelogs/
   - .ansible/
   - tests/
+  - playbooks/
+  - roles/devspace/meta/main.yml
 
 parseable: true
 # quiet: true
@@ -61,7 +63,6 @@ skip_list:
   - var-naming[no-role-prefix]
   - name[prefix]
   - internal-error
-  - syntax-check[specific] # Skip syntax-check for collection roles in playbooks
 
 # Ansible-lint does not automatically load rules that have the 'opt-in' tag.
 # You must enable opt-in rules by listing each rule 'id' below.
