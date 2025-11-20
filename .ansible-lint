@@ -22,11 +22,10 @@ parseable: true
 
 # Mock modules or roles in order to pass ansible-playbook --syntax-check
 mock_modules:
-  - capabilities
-  - subuid
-  - subgid
-  - podman_image
-  - firewalld
+  - community
+  - lennysh
+  - containers
+  - ansible.posix
 # mock_roles:
 #   - mocked_role
 #   - author.role_name # old standalone galaxy role
