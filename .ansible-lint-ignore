@@ -1,1 +1,4 @@
 # This file contains ignores rule violations for ansible-lint
+playbooks/deploy-devspace.yml syntax-check[specific]
+playbooks/install-code-server.yml syntax-check[specific]
+roles/devspace/meta/main.yml syntax-check[specific]

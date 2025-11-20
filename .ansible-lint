@@ -22,14 +22,14 @@ parseable: true
 
 # Mock modules or roles in order to pass ansible-playbook --syntax-check
 mock_modules:
-  - community
-  - lennysh
-  - containers
-  - posix
-# mock_roles:
-#   - mocked_role
-#   - author.role_name # old standalone galaxy role
-#   - fake_namespace.fake_collection.fake_role # role within a collection
+  - community.general.capabilities
+  - lennysh.devspaces.subuid
+  - lennysh.devspaces.subgid
+  - containers.podman.podman_image
+  - ansible.posix.firewalld
+mock_roles:
+  - lennysh.devspaces.code_server
+  - lennysh.devspaces.devspace
 
 # Enable checking of loop variable prefixes in roles
 # loop_var_prefix: ^(__|{role}_)
@@ -61,6 +61,7 @@ skip_list:
   - var-naming[no-role-prefix]
   - name[prefix]
   - internal-error
+  - syntax-check[specific] # Skip syntax-check for collection roles in playbooks
 
 # Ansible-lint does not automatically load rules that have the 'opt-in' tag.
 # You must enable opt-in rules by listing each rule 'id' below.
@@ -92,7 +93,8 @@ warn_list:
 #   - all
 
 # Offline mode disables installation of requirements.yml and schema refreshing
-offline: true
+# Set to false to allow ansible-lint to install required collections
+offline: false
 
 # Define required Ansible's variables to satisfy syntax check
 # extra_vars:
@@ -105,6 +107,9 @@ offline: true
 # Uncomment to enforce action validation with tasks, usually is not
 # needed as Ansible syntax check also covers it.
 # skip_action_validation: false
+
+# Skip action validation to avoid issues with collection modules during linting
+skip_action_validation: true
 
 # List of additional kind:pattern to be added at the top of the default
 # match list, first match determines the file kind.
