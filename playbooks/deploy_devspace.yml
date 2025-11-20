@@ -5,23 +5,23 @@
 # using code-server. It assumes code-server is already installed.
 #
 # Usage:
-#   ansible-playbook -i inventory playbooks/deploy-devspace.yml -e "username=alice" -e "code_server_pass=securepass123"
+#   ansible-playbook -i inventory playbooks/deploy_devspace.yml -e "username=alice" -e "code_server_pass=securepass123"
 #
 #   With specific port:
-#   ansible-playbook -i inventory playbooks/deploy-devspace.yml \
+#   ansible-playbook -i inventory playbooks/deploy_devspace.yml \
 #     -e "username=alice" \
 #     -e "code_server_pass=securepass123" \
 #     -e "dev_server_port=8080"
 #
 #   With custom port range:
-#   ansible-playbook -i inventory playbooks/deploy-devspace.yml \
+#   ansible-playbook -i inventory playbooks/deploy_devspace.yml \
 #     -e "username=alice" \
 #     -e "code_server_pass=securepass123" \
 #     -e "port_range_start=9000" \
 #     -e "port_range_end=9099"
 #
 #   Using vault for password:
-#   ansible-playbook -i inventory playbooks/deploy-devspace.yml \
+#   ansible-playbook -i inventory playbooks/deploy_devspace.yml \
 #     -e "username=alice" \
 #     -e "code_server_pass={{ vault_code_server_pass }}" \
 #     --ask-vault-pass
@@ -78,8 +78,8 @@
       ansible.builtin.fail:
         msg: |
           code-server is not installed on this host.
-          Please run install-code-server.yml first:
-          ansible-playbook -i inventory playbooks/install-code-server.yml
+          Please run install_code_server.yml first:
+          ansible-playbook -i inventory playbooks/install_code_server.yml
       when: code_server_check.rc != 0
 
   roles:

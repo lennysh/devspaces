@@ -5,13 +5,13 @@
 # It also installs system-wide dependencies: podman, git, python3.11, and python3.11-pip.
 #
 # Usage:
-#   ansible-playbook -i inventory playbooks/install-code-server.yml
+#   ansible-playbook -i inventory playbooks/install_code_server.yml
 #
 #   To specify a version:
-#   ansible-playbook -i inventory playbooks/install-code-server.yml -e "code_server_version=4.20.0"
+#   ansible-playbook -i inventory playbooks/install_code_server.yml -e "code_server_version=4.20.0"
 #
 #   To use latest version (default):
-#   ansible-playbook -i inventory playbooks/install-code-server.yml -e "code_server_version=latest"
+#   ansible-playbook -i inventory playbooks/install_code_server.yml -e "code_server_version=latest"
 
 - name: Install or Update code-server
   hosts: all
@@ -32,6 +32,6 @@
         msg:
           - "code-server installation completed"
           - "Installed packages: code-server, podman, git, python3.11, python3.11-pip"
-          - "Next step: Run deploy-devspace.yml to configure a user devspace"
+          - "Next step: Run deploy_devspace.yml to configure a user devspace"
 
 ...
