@@ -1,0 +1,29 @@
+---
+- name: Check if podman is already installed
+  ansible.builtin.stat:
+    path: /usr/bin/podman
+  register: podman_installed
+  changed_when: false
+  failed_when: false
+
+- name: Install podman and required dependencies
+  ansible.builtin.dnf:
+    name:
+      - podman
+      - python3-firewall # Required for ansible.posix.firewalld module
+    state: present
+  when: not podman_installed.stat.exists
+
+- name: Verify podman installation
+  ansible.builtin.command: podman --version
+  register: podman_version
+  changed_when: false
+
+- name: Display podman installation info
+  ansible.builtin.debug:
+    msg: "podman is installed: {{ podman_version.stdout }}"
+
+- name: Include container image building tasks
+  ansible.builtin.include_tasks: build_image.yml
+  when: podman_build_image | bool
+...

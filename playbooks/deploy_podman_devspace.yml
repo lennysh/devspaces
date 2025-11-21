@@ -1,32 +1,40 @@
 ---
-# Playbook: Deploy Development Space for User
+# Playbook: Deploy Podman Development Space for User
 #
 # This playbook configures a development environment (devspace) for a specific user
-# using code-server. It assumes code-server is already installed.
+# using a Podman container with code-server. It uses systemd quadlets to manage
+# the container as a user service, running both inside and outside the container
+# as the specified user (no root required inside container).
 #
 # Usage:
-#   ansible-playbook -i inventory playbooks/deploy_devspace.yml -e "username=alice" -e "code_server_pass=securepass123"
+#   ansible-playbook -i inventory playbooks/deploy_podman_devspace.yml -e "username=alice" -e "code_server_pass=securepass123"
 #
 #   With specific port:
-#   ansible-playbook -i inventory playbooks/deploy_devspace.yml \
+#   ansible-playbook -i inventory playbooks/deploy_podman_devspace.yml \
 #     -e "username=alice" \
 #     -e "code_server_pass=securepass123" \
 #     -e "dev_server_port=8080"
 #
 #   With custom port range:
-#   ansible-playbook -i inventory playbooks/deploy_devspace.yml \
+#   ansible-playbook -i inventory playbooks/deploy_podman_devspace.yml \
 #     -e "username=alice" \
 #     -e "code_server_pass=securepass123" \
 #     -e "port_range_start=9000" \
 #     -e "port_range_end=9099"
 #
 #   Using vault for password:
-#   ansible-playbook -i inventory playbooks/deploy_devspace.yml \
+#   ansible-playbook -i inventory playbooks/deploy_podman_devspace.yml \
 #     -e "username=alice" \
 #     -e "code_server_pass={{ vault_code_server_pass }}" \
 #     --ask-vault-pass
+#
+#   With custom container image:
+#   ansible-playbook -i inventory playbooks/deploy_podman_devspace.yml \
+#     -e "username=alice" \
+#     -e "code_server_pass=securepass123" \
+#     -e "podman_devspace_image=quay.io/myorg/my-image:latest"
 
-- name: Deploy Development Space
+- name: Deploy Podman Development Space
   hosts: all
   become: true
   vars:
@@ -45,22 +53,8 @@
     port_range_start: 8080
     port_range_end: 8099
 
-    # OPTIONAL: Deployment options
-    deploy_inventory: false
-    deploy_example_repo: false
-    deploy_ansiblegalaxy_repo: false
-
-    # OPTIONAL: SSL certificate configuration
-    cert_name: null
-    key_name: null
-    certandkeysourcefolder: null
-    certandkeydestfolder: null
-
-    # OPTIONAL: Podman/Container configuration
-    additionalimagestores: null
-    ansible_image: registry.redhat.io/ansible-automation-platform-26/ee-supported-rhel9:latest
-    registry_user: null
-    registry_pass: null
+    # OPTIONAL: Container image to use
+    podman_devspace_image: "quay.io/lshirley/ansible-dev-space:latest"
 
   pre_tasks:
     - name: Validate required variables
@@ -68,22 +62,22 @@
         msg: "username must be specified. Use -e 'username=youruser'"
       when: username is not defined or username is none
 
-    - name: Check if code-server is installed
-      ansible.builtin.command: which code-server
-      register: code_server_check
+    - name: Check if podman is installed
+      ansible.builtin.command: which podman
+      register: podman_check
       changed_when: false
       failed_when: false
 
-    - name: Fail if code-server is not installed
+    - name: Fail if podman is not installed
       ansible.builtin.fail:
         msg: |
-          code-server is not installed on this host.
-          Please run install_code_server.yml first:
-          ansible-playbook -i inventory playbooks/install_code_server.yml
-      when: code_server_check.rc != 0
+          podman is not installed on this host.
+          Please run install_podman.yml first:
+          ansible-playbook -i inventory playbooks/install_podman.yml
+      when: podman_check.rc != 0
 
   roles:
-    - role: lennysh.devspaces.devspace
+    - role: lennysh.devspaces.podman_devspace
       # The role already displays the devspace access information,
       # so no post_tasks are needed
 ...

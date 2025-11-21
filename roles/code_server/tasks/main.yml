@@ -58,5 +58,4 @@
       - python3.11-pip
       - python3-firewall
     state: present
-
 ...

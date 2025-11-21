@@ -1,0 +1,29 @@
+---
+- name: Block | VSCode User Settings
+  vars:
+    vscode_user_settings_dir: "/home/{{ username }}/devspace/.local/share/code-server/User"
+  block:
+    - name: Ensure code-server user settings directory exists
+      ansible.builtin.file:
+        path: "{{ vscode_user_settings_dir }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Check if code-server user settings file already exists
+      ansible.builtin.stat:
+        path: "{{ vscode_user_settings_dir }}/settings.json"
+      register: vscode_user_settings_file
+
+    - name: Create default code-server user settings file
+      ansible.builtin.copy:
+        src: "{{ role_path }}/files/user_home/vscode_user_settings.json"
+        dest: "{{ vscode_user_settings_dir }}/settings.json"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+        remote_src: false
+      when: not vscode_user_settings_file.stat.exists
+      changed_when: true
+...

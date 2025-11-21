@@ -71,6 +71,100 @@ Installs code-server (VS Code Server) system-wide on the target host.
 - Downloads and installs the RPM package using dnf
 - Installs system-wide dependencies required for development environments
 
+### lennysh.devspaces.podman
+
+Installs podman container runtime system-wide on the target host and optionally builds the container image for use with `podman_devspace` role.
+
+**Requirements:**
+- RHEL/CentOS/Fedora with dnf package manager
+- Root or sudo access
+
+**Role Variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `podman_build_image` | `true` | Whether to build the container image. Set to `false` to skip image building |
+| `podman_build_image_name` | `quay.io/lshirley/ansible-dev-space:latest` | Name and tag of the container image to build |
+| `podman_build_code_server_version` | `latest` | Code-server version to use in the container |
+| `podman_build_source_path` | Auto-detected | Path to container build directory on control node |
+
+**Example Playbook:**
+
+```yaml
+- hosts: all
+  roles:
+    - lennysh.devspaces.podman
+```
+
+**What Gets Installed:**
+- podman (container runtime)
+- python3-firewall (required for ansible.posix.firewalld module)
+
+**What Gets Built:**
+- Container image: `quay.io/lshirley/ansible-dev-space:latest` (if `podman_build_image: true`)
+
+### lennysh.devspaces.podman_devspace
+
+Configures a development environment (devspace) for a specific user using a Podman container with code-server. This role uses systemd quadlets to manage the container as a user service, running both inside and outside the container as the specified user (no root required).
+
+**Requirements:**
+- Podman must be installed
+- Target user must exist on the system
+- Root or sudo access (for initial setup only)
+- Container image with code-server and development tools pre-installed
+
+**Role Variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `username` | **required** | Username to configure the devspace for |
+| `podman_devspace_image` | `quay.io/lshirley/ansible-dev-space:latest` | Container image to use for the devspace |
+| `code_server_pass` | `null` | Password for code-server authentication. If not set, authentication is disabled |
+| `dev_server_port` | `null` | Port for code-server to listen on. If `null`, automatically assigns next available port |
+| `port_range_start` | `8080` | Starting port for automatic port assignment |
+| `port_range_end` | `8099` | Ending port for automatic port assignment |
+| `podman_devspace_container_name_prefix` | `code-server` | Prefix for the container name |
+
+**Example Playbook:**
+
+```yaml
+- hosts: all
+  roles:
+    - lennysh.devspaces.podman_devspace
+  vars:
+    username: alice
+    podman_devspace_image: quay.io/lshirley/ansible-dev-space:latest
+    code_server_pass: securepass123
+    dev_server_port: null  # Auto-assign port
+    port_range_start: 8080
+    port_range_end: 8099
+```
+
+**Features:**
+- **Smart Port Management**: Automatically discovers existing quadlet containers and assigns the next available port
+- **Port Reuse**: If a user already has a container configured, reuses their existing port from the quadlet file
+- **Automatic Port Assignment**: Finds next available port in the specified range
+- **User-Specific Configuration**: Each user gets their own container instance with isolated settings
+- **Rootless Operation**: Container runs as the user both inside and outside (no root required)
+- **Systemd Quadlet Integration**: Uses systemd quadlets for container lifecycle management
+- **User Lingering**: Automatically enables user lingering for systemd user services
+- **Firewall Configuration**: Automatically opens the required port in firewalld (if available)
+
+**What Gets Configured:**
+- Systemd quadlet file: `~/.config/containers/systemd/code-server-{{ username }}.container`
+- Systemd user service: `code-server-{{ username }}.service`
+- Container: `code-server-{{ username }}` (managed by systemd)
+- User's home directory mounted into container at `/home/{{ username }}`
+- Firewall rules (if firewalld is running)
+
+**Access:**
+After deployment, access the devspace at:
+```
+https://<hostname>:<port>/?folder=/home/<username>/devspace
+```
+
+The role will display the full URL at the end of execution.
+
 ### lennysh.devspaces.devspace
 
 Configures a development environment (devspace) for a specific user using code-server. This role assumes code-server is already installed (via `lennysh.devspaces.code_server`).
@@ -146,7 +240,9 @@ https://<hostname>:<port>/?folder=/home/<username>/ansible
 
 The role will display the full URL at the end of execution.
 
-## Complete Example
+## Complete Examples
+
+### Traditional Code-Server Workflow
 
 ```yaml
 ---
@@ -167,6 +263,27 @@ The role will display the full URL at the end of execution.
     
     # Then, configure devspace for the user
     - lennysh.devspaces.devspace
+```
+
+### Podman Container Workflow
+
+```yaml
+---
+- name: Setup Podman development environment
+  hosts: dev_servers
+  become: true
+  vars:
+    username: developer1
+    code_server_pass: "{{ vault_code_server_pass }}"
+    port_range_start: 8080
+    port_range_end: 8099
+
+  roles:
+    # First, install podman and build container image
+    - lennysh.devspaces.podman
+    
+    # Then, deploy devspace using container
+    - lennysh.devspaces.podman_devspace
 ```
 
 ## License

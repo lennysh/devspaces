@@ -1,0 +1,370 @@
+---
+# Ensure user's home directory exists
+- name: Ensure user's home directory exists
+  ansible.builtin.file:
+    path: "/home/{{ username }}"
+    state: directory
+    owner: "{{ username }}"
+    mode: "0755"
+
+# Ensure quadlet directory exists
+- name: Ensure quadlet systemd directory exists
+  ansible.builtin.file:
+    path: "/home/{{ username }}/.config/containers/systemd"
+    state: directory
+    owner: "{{ username }}"
+    mode: "0755"
+    recurse: true
+
+# Generate quadlet container file from template
+- name: Generate quadlet container file
+  ansible.builtin.template:
+    src: code-server.container.j2
+    dest: "/home/{{ username }}/.config/containers/systemd/{{ podman_devspace_container_name_prefix }}-{{ username }}.container"
+    owner: "{{ username }}"
+    mode: "0644"
+  become_user: "{{ username }}"
+  become: true
+
+# Enable user lingering for systemd user services
+- name: Enable user lingering for systemd user services
+  ansible.builtin.command: loginctl enable-linger {{ username }}
+  register: linger_result
+  changed_when: true
+  failed_when: false
+
+# Get user's UID for XDG_RUNTIME_DIR
+- name: Get user UID
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ username }}"
+  register: user_passwd
+  changed_when: false
+
+- name: Set user UID and GID facts
+  ansible.builtin.set_fact:
+    user_uid: "{{ user_passwd.ansible_facts.getent_passwd[username][1] }}"
+    user_gid: "{{ user_passwd.ansible_facts.getent_passwd[username][2] }}"
+
+# Reload systemd user daemon
+- name: Reload systemd user daemon
+  ansible.builtin.command:
+    cmd: systemctl --user daemon-reload
+  become_user: "{{ username }}"
+  become: true
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ user_uid }}"
+  register: daemon_reload_result
+  changed_when: true
+  failed_when: false
+
+# Alternative: Use runuser if direct command fails
+- name: Reload systemd user daemon via runuser
+  ansible.builtin.command:
+    cmd: runuser -l "{{ username }}" -c "systemctl --user daemon-reload"
+  when: daemon_reload_result.rc != 0
+  register: daemon_reload_runuser
+  changed_when: true
+  failed_when: false
+
+# Wait a moment for quadlet generator to process the container file
+- name: Wait for quadlet generator to process container file
+  ansible.builtin.pause:
+    seconds: 2
+  when: daemon_reload_result.rc == 0 or (daemon_reload_runuser is defined and daemon_reload_runuser.rc == 0)
+
+# Make container image available to the target user
+# Podman stores images per-user, so if the image was built as root,
+# we need to transfer it to the target user's image store
+- name: Set temporary image file path
+  ansible.builtin.set_fact:
+    _temp_image_file: "/tmp/podman-image-{{ username }}-{{ ansible_date_time.epoch }}.tar"
+
+- name: Check if image exists for target user
+  ansible.builtin.command:
+    cmd: podman image exists "{{ podman_devspace_image }}"
+  become_user: "{{ username }}"
+  become: true
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ user_uid }}"
+  register: image_check_user
+  changed_when: false
+  failed_when: false
+
+- name: Check if image exists for root
+  ansible.builtin.command:
+    cmd: podman image exists "{{ podman_devspace_image }}"
+  become: true
+  register: image_check_root
+  changed_when: false
+  failed_when: false
+  when: image_check_user.rc != 0
+
+- name: Save image from root to temporary file
+  ansible.builtin.command:
+    cmd: podman save "{{ podman_devspace_image }}" -o "{{ _temp_image_file }}"
+  become: true
+  register: image_save_result
+  changed_when: true
+  when:
+    - image_check_user.rc != 0
+    - image_check_root.rc == 0
+
+- name: Load image for target user
+  ansible.builtin.command:
+    cmd: podman load -i "{{ _temp_image_file }}"
+  become_user: "{{ username }}"
+  become: true
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ user_uid }}"
+  register: image_load_result
+  changed_when: true
+  when:
+    - image_check_user.rc != 0
+    - image_check_root.rc == 0
+    - image_save_result is defined
+
+- name: Clean up temporary image file
+  ansible.builtin.file:
+    path: "{{ _temp_image_file }}"
+    state: absent
+  when:
+    - image_check_user.rc != 0
+    - image_check_root.rc == 0
+    - image_load_result is defined
+
+- name: Fail if image is not available
+  ansible.builtin.fail:
+    msg: |
+      Container image {{ podman_devspace_image }} is not available.
+      The image must be built first using the podman role, or it must be available
+      in the root podman image store.
+  when:
+    - image_check_user.rc != 0
+    - image_check_root.rc != 0
+
+# Check if service is available (wait for systemd to process quadlet)
+- name: Check if service is available
+  ansible.builtin.command:
+    cmd: systemctl --user list-unit-files | grep -q "{{ podman_devspace_container_name_prefix }}-{{ username }}.service"
+  become_user: "{{ username }}"
+  become: true
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ user_uid }}"
+  register: service_check
+  until: service_check.rc == 0
+  retries: 10
+  delay: 1
+  failed_when: false
+  changed_when: false
+
+# Verify service exists before attempting to enable
+- name: Verify service file exists
+  ansible.builtin.command:
+    cmd: systemctl --user cat "{{ podman_devspace_container_name_prefix }}-{{ username }}.service"
+  become_user: "{{ username }}"
+  become: true
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ user_uid }}"
+  register: service_verify
+  failed_when: service_verify.rc != 0
+  changed_when: false
+
+# Start the container service
+- name: Start code-server container service
+  ansible.builtin.command:
+    cmd: systemctl --user start "{{ podman_devspace_container_name_prefix }}-{{ username }}.service"
+  become_user: "{{ username }}"
+  become: true
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ user_uid }}"
+  register: service_start_result
+  changed_when: true
+  failed_when: false
+
+# Gather diagnostic information if service failed to start
+- name: Get service status for diagnostics
+  ansible.builtin.command:
+    cmd: systemctl --user status "{{ podman_devspace_container_name_prefix }}-{{ username }}.service" --no-pager || true
+  become_user: "{{ username }}"
+  become: true
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ user_uid }}"
+  register: service_status
+  changed_when: false
+  when: service_start_result.rc != 0
+
+- name: Get service logs for diagnostics
+  ansible.builtin.command:
+    cmd: journalctl --user -u "{{ podman_devspace_container_name_prefix }}-{{ username }}.service" -n 50 --no-pager || true
+  become_user: "{{ username }}"
+  become: true
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ user_uid }}"
+  register: service_logs
+  changed_when: false
+  when: service_start_result.rc != 0
+
+- name: Display service status on failure
+  ansible.builtin.debug:
+    msg: "{{ service_status.stdout_lines | default([]) }}"
+  when: service_start_result.rc != 0
+
+- name: Display service logs on failure
+  ansible.builtin.debug:
+    msg: "{{ service_logs.stdout_lines | default([]) }}"
+  when: service_start_result.rc != 0
+
+- name: Fail if service did not start
+  ansible.builtin.fail:
+    msg: "Failed to start code-server container service. Check the logs above for details."
+  when: service_start_result.rc != 0
+
+# Wait a moment for container to start
+- name: Wait briefly for container to start
+  ansible.builtin.pause:
+    seconds: 2
+  when: service_start_result.rc == 0
+
+# Check if container is actually running
+- name: Check if container is running
+  ansible.builtin.command:
+    cmd: podman ps --filter "name={{ podman_devspace_container_name_prefix }}-{{ username }}" --format "{{ '{{' }}.Names{{ '}}' }}"
+  become_user: "{{ username }}"
+  become: true
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ user_uid }}"
+  register: container_running_check
+  changed_when: false
+  failed_when: false
+  when: service_start_result.rc == 0
+
+# Check container logs - try to get logs even if container exited (with --rm it may be gone)
+- name: Check container logs for exit reason
+  ansible.builtin.command:
+    cmd: podman logs "{{ podman_devspace_container_name_prefix }}-{{ username }}" 2>&1 || echo "Container not found or already removed"
+  become_user: "{{ username }}"
+  become: true
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ user_uid }}"
+  register: container_logs
+  changed_when: false
+  failed_when: false
+  when: service_start_result.rc == 0
+
+# Get service logs from journalctl which may have more info
+- name: Get service logs from journalctl
+  ansible.builtin.command:
+    cmd: journalctl --user -u "{{ podman_devspace_container_name_prefix }}-{{ username }}.service" -n 30 --no-pager
+  become_user: "{{ username }}"
+  become: true
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ user_uid }}"
+  register: journalctl_logs
+  changed_when: false
+  failed_when: false
+  when: service_start_result.rc == 0
+
+- name: Display container running status
+  ansible.builtin.debug:
+    msg: "Container running status: {{ container_running_check.stdout | default('not found') }}"
+  when:
+    - service_start_result.rc == 0
+    - container_running_check is defined
+
+- name: Display container logs if available
+  ansible.builtin.debug:
+    msg: "{{ container_logs.stdout_lines | default([]) + container_logs.stderr_lines | default([]) }}"
+  when:
+    - service_start_result.rc == 0
+    - container_logs.stdout is defined or container_logs.stderr is defined
+
+- name: Display journalctl service logs
+  ansible.builtin.debug:
+    msg: "{{ journalctl_logs.stdout_lines | default([]) }}"
+  when:
+    - service_start_result.rc == 0
+    - journalctl_logs.stdout is defined
+
+# If container is not running, try to manually run it to see the error
+- name: Test container run manually to capture error
+  ansible.builtin.command:
+    cmd: timeout 5 podman run --rm --name test-{{ podman_devspace_container_name_prefix }}-{{ username }} -v /home/{{ username }}:/home/{{ username }} --publish {{ dev_server_port }}:8080 --env PASSWORD={{ code_server_pass | default('') }} --env USER={{ username }} --userns=keep-id {{ podman_devspace_image }} || true
+  become_user: "{{ username }}"
+  become: true
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ user_uid }}"
+  register: manual_container_test
+  changed_when: false
+  failed_when: false
+  when:
+    - service_start_result.rc == 0
+    - container_running_check.stdout == "" or container_running_check.stdout is not defined
+
+- name: Display manual container test output
+  ansible.builtin.debug:
+    msg: "{{ manual_container_test.stdout_lines | default([]) + manual_container_test.stderr_lines | default([]) }}"
+  when:
+    - service_start_result.rc == 0
+    - manual_container_test is defined
+    - (manual_container_test.stdout is defined or manual_container_test.stderr is defined)
+
+# Wait a moment for container to fully start
+- name: Wait for container to initialize
+  ansible.builtin.pause:
+    seconds: 3
+  when: service_start_result.rc == 0
+
+# Attempt to enable the service for automatic startup
+# Note: Quadlet-generated user services may be transient and cannot be enabled
+# If this fails, the service will still start on boot because:
+# 1. The .container file is in ~/.config/containers/systemd/ (persistent location)
+# 2. User lingering is enabled (ensures user services start on boot)
+# 3. The [Install] section with WantedBy=default.target ensures it starts
+- name: Enable code-server container service for automatic startup
+  ansible.builtin.command:
+    cmd: systemctl --user enable "{{ podman_devspace_container_name_prefix }}-{{ username }}.service"
+  become_user: "{{ username }}"
+  become: true
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ user_uid }}"
+  register: service_enable_result
+  changed_when: true
+  failed_when: false
+
+# Wait for container to be running
+- name: Wait for container to be running
+  ansible.builtin.wait_for:
+    port: "{{ dev_server_port }}"
+    host: "{{ ansible_default_ipv4.address | default('127.0.0.1') }}"
+    delay: 2
+    timeout: 30
+  when: dev_server_port is defined
+
+# Configure firewalld if available
+- name: Check if firewalld service exists and is active
+  ansible.builtin.systemd:
+    name: firewalld
+  register: firewalld_status
+  changed_when: false
+  failed_when: false
+
+- name: Open port in firewalld
+  ansible.posix.firewalld:
+    port: "{{ dev_server_port }}/tcp"
+    permanent: true
+    state: enabled
+    immediate: true
+  when:
+    - firewalld_status.status is defined
+    - firewalld_status.status.ActiveState == "active"
+    - dev_server_port is defined
+  failed_when: false
+
+- name: Display firewalld message if not running
+  ansible.builtin.debug:
+    msg: "firewalld is not running. Port {{ dev_server_port }} may need to be opened manually."
+  when:
+    - firewalld_status.status is not defined or firewalld_status.status.ActiveState != "active"
+    - dev_server_port is defined
+...

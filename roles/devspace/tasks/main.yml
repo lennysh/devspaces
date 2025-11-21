@@ -21,7 +21,30 @@
     msg: "code-server is not installed. Please run the lennysh.devspaces.code_server role first."
   when: code_server_check.rc != 0
 
-# Discover existing code-server services and their ports
+# Discover all ports in use on the system
+- name: Get ports currently in use by listening sockets
+  ansible.builtin.command: ss -tln
+  register: all_ports_ss
+  changed_when: false
+
+- name: Extract all ports in use from ss output
+  ansible.builtin.set_fact:
+    all_ports_in_use: "{{ all_ports_in_use | default([]) + [item | regex_search(':(\\d+)$', '\\1') | int] }}"
+  loop: "{{ all_ports_ss.stdout_lines }}"
+  vars:
+    port_match: "{{ item | regex_search(':(\\d+)$') }}"
+  when:
+    - port_match is not none
+    - port_match != ""
+    - (port_match | int) >= (port_range_start | int)
+    - (port_match | int) <= (port_range_end | int)
+
+- name: Set empty list if no existing ports found
+  ansible.builtin.set_fact:
+    all_ports_in_use: []
+  when: all_ports_in_use is not defined
+
+# Discover existing code-server services and their ports (for reuse logic)
 - name: Get existing code-server systemd services
   ansible.builtin.shell: |
     set -o pipefail
@@ -48,9 +71,9 @@
   failed_when: false
   changed_when: false
 
-- name: Extract ports from existing configs
+- name: Extract ports from existing code-server configs
   ansible.builtin.set_fact:
-    existing_ports: "{{ existing_ports | default([]) + [item.content | b64decode | regex_search('bind-addr: 0\\.0\\.0\\.0:(\\d+)', '\\1') | int] }}"
+    existing_code_server_ports: "{{ existing_code_server_ports | default([]) + [item.content | b64decode | regex_search('bind-addr: 0\\.0\\.0\\.0:(\\d+)', '\\1') | int] }}"
   loop: "{{ existing_configs.results | default([]) }}"
   vars:
     config_content: "{{ item.content | b64decode | default('') }}"
@@ -64,10 +87,10 @@
   loop_control:
     label: "{{ user_label }}"
 
-- name: Set empty list if no existing ports found
+- name: Set empty list if no existing code-server ports found
   ansible.builtin.set_fact:
-    existing_ports: []
-  when: existing_ports is not defined
+    existing_code_server_ports: []
+  when: existing_code_server_ports is not defined
 
 # Check if current user already has a service and get their port
 - name: Check if user already has a service
@@ -110,7 +133,7 @@
 
 - name: Calculate next available port
   ansible.builtin.set_fact:
-    dev_server_port: "{{ (existing_ports | default([]) | max | default(port_range_start - 1) | int) + 1 }}"
+    dev_server_port: "{{ ((all_ports_in_use | default([]) | max | default(port_range_start - 1)) | int) + 1 }}"
   when: dev_server_port is not defined or dev_server_port is none
 
 - name: Fail if port range exhausted
@@ -122,6 +145,23 @@
   ansible.builtin.fail:
     msg: "Port {{ dev_server_port }} is below the allowed range {{ port_range_start }}-{{ port_range_end }}"
   when: dev_server_port | int < port_range_start | int
+
+# Verify the selected port is not already in use by any process
+- name: Check if selected port is already in use
+  ansible.builtin.command: ss -tln
+  register: port_check_ss
+  changed_when: false
+
+- name: Check if port is in use (excluding user's existing service)
+  ansible.builtin.set_fact:
+    port_in_use: "{{ port_check_ss.stdout | regex_search(':' ~ (dev_server_port | string) ~ '( |\\n|$)') is not none }}"
+
+- name: Verify port is available
+  ansible.builtin.fail:
+    msg: "Port {{ dev_server_port }} is already in use by another process. Please choose a different port or stop the process using this port."
+  when:
+    - port_in_use | bool
+    - not (user_service_exists.stat.exists | default(false) and user_existing_port is defined and user_existing_port | int == dev_server_port | int)
 
 # Ensure certs directory exists (shared across all users)
 - name: Ensure certs directory exists

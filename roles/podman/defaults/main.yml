@@ -1,0 +1,34 @@
+---
+# Container image configuration
+# Image name and tag to build
+podman_build_image_name: "quay.io/lshirley/ansible-dev-space:latest"
+
+# Code-server version to use in the container image
+# Use "latest" to auto-discover the latest version, or specify a version like "4.91.1"
+podman_build_code_server_version: "latest"
+
+# Path to container build directory on the control node
+# This should point to the container-ansible-dev-space directory
+# If not set, the role will use the container files from the role's files directory ({{ role_path }}/files/container-ansible-dev-space)
+# Falls back to playbook_dir if role_path is not available ({{ playbook_dir }}/../containers/ansible-dev-space)
+podman_build_source_path:
+
+# Whether to build the container image
+# Set to false to skip image building (e.g., if image is already built or pulled)
+podman_build_image: true
+
+# Whether to force rebuild the image even if it already exists
+# Set to true to delete and rebuild the image (useful when entrypoint or other files change)
+podman_build_force_rebuild: false
+
+# Whether to set SELinux context on build context files
+# Required on systems with SELinux enabled
+podman_build_set_selinux_context: true
+
+# Whether to clean up intermediate images after build
+# Set to false to keep intermediate images for debugging
+podman_build_cleanup_intermediate: true
+
+# GitHub API headers for authentication (optional)
+_github_api_headers: "{{ {'GITHUB_TOKEN': lookup('ansible.builtin.env', 'GITHUB_TOKEN')} if (lookup('ansible.builtin.env', 'GITHUB_TOKEN')) else {} }}"
+...

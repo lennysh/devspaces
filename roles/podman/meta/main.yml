@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  author: lennysh
+  description: Installs podman container runtime system-wide and optionally builds the container image
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.15"
+  platforms:
+    - name: EL
+      versions:
+        - all
+    - name: Fedora
+      versions:
+        - all
+  galaxy_tags:
+    - podman
+    - container
+    - runtime
+
+dependencies: []
+...

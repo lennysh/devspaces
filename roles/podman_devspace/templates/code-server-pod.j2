@@ -1,0 +1,28 @@
+# templates/code-server-pod.j2
+# This is a Kubernetes-style Pod definition file that Podman can use.
+# It defines the container, ports, volumes, and environment variables.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ vscode_container_name_prefix }}-{{ vscode_user_name }}-pod"
+spec:
+  containers:
+    - name: "{{ vscode_container_name_prefix }}-{{ vscode_user_name }}"
+      image: "{{ vscode_container_image }}"
+      ports:
+        - containerPort: 8080 # Assuming your container listens on 8080 internally
+          hostPort: {{ vscode_assigned_port }}
+      env:
+        - name: PASSWORD
+          value: "{{ vscode_server_password }}"
+        # Add any other ENV vars your image needs
+        # - name: GIT_USER_NAME
+        #   value: "{{ vscode_user_name }}"
+      volumeMounts:
+        - name: user-home-volume
+          mountPath: "{{ vscode_container_home_dir }}"
+  volumes:
+    - name: user-home-volume
+      hostPath:
+        path: "{{ vscode_user_host_dir }}"
+        type: Directory

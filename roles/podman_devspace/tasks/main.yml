@@ -1,0 +1,29 @@
+---
+- name: Fail if username is not defined
+  ansible.builtin.fail:
+    msg: "username must be defined"
+  when: username is not defined or username is none
+
+- name: Check if podman is installed
+  ansible.builtin.command: which podman
+  register: podman_check
+  changed_when: false
+  failed_when: false
+
+- name: Fail if podman is not installed
+  ansible.builtin.fail:
+    msg: "podman is not installed. Please install podman first."
+  when: podman_check.rc != 0
+
+- name: Include initial setup tasks
+  ansible.builtin.include_tasks: 00-setup.yml
+
+- name: Include task to discover and assign port
+  ansible.builtin.include_tasks: 01-find-port.yml
+
+- name: Include task to deploy quadlet container
+  ansible.builtin.include_tasks: 02-deploy-quadlet.yml
+
+- name: Include task to display connection info
+  ansible.builtin.include_tasks: 03-gather-facts.yml
+...

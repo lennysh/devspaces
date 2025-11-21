@@ -1,0 +1,120 @@
+---
+# Check if current user already has a quadlet container first
+# If it exists, we'll reuse the port and skip port discovery
+- name: Check if user already has a quadlet container
+  ansible.builtin.stat:
+    path: "/home/{{ username }}/.config/containers/systemd/{{ podman_devspace_container_name_prefix }}-{{ username }}.container"
+  register: user_quadlet_exists
+
+- name: Read existing quadlet file for user to extract port
+  ansible.builtin.slurp:
+    src: "/home/{{ username }}/.config/containers/systemd/{{ podman_devspace_container_name_prefix }}-{{ username }}.container"
+  register: user_existing_quadlet_file
+  when: user_quadlet_exists.stat.exists
+  failed_when: false
+  changed_when: false
+
+- name: Extract existing port for user from quadlet file
+  ansible.builtin.set_fact:
+    user_existing_port: "{{ (user_existing_quadlet_file.content | b64decode | regex_search('PublishPort=(\\d+):', '\\1') | first | int) }}"
+  vars:
+    file_content: "{{ user_existing_quadlet_file.content | b64decode | default('') }}"
+    port_match: "{{ file_content | regex_search('PublishPort=(\\d+):') }}"
+  when:
+    - user_quadlet_exists.stat.exists
+    - user_existing_quadlet_file.content is defined
+    - port_match is not none
+    - port_match != ""
+
+# Calculate port for user
+# If quadlet file exists, reuse the port from it (regardless of service status)
+- name: Set port from existing quadlet file if available
+  ansible.builtin.set_fact:
+    dev_server_port: "{{ user_existing_port }}"
+    port_reused_from_quadlet: true
+  when:
+    - user_quadlet_exists.stat.exists
+    - user_existing_port is defined
+
+- name: Use provided port if set
+  ansible.builtin.set_fact:
+    dev_server_port: "{{ dev_server_port }}"
+  when: dev_server_port is defined and dev_server_port is not none
+
+# Discover existing ports in use (only if we need to find a new port)
+- name: Get ports currently in use by listening sockets
+  ansible.builtin.command: ss -tln
+  register: ss_output
+  changed_when: false
+  when: not (port_reused_from_quadlet | default(false))
+
+- name: Extract ports in use from ss output
+  ansible.builtin.set_fact:
+    existing_ports: "{{ existing_ports | default([]) + [port_num | int] }}"
+  loop: "{{ ss_output.stdout_lines }}"
+  vars:
+    # Extract port from Local Address:Port column (format: 0.0.0.0:8080 or [::]:8080)
+    # Find all :PORT patterns and take the first one (Local Address port)
+    port_matches: "{{ item | regex_findall(':(\\d+)') }}"
+    port_num: "{{ port_matches[0] | default('') if port_matches | length > 0 else '' }}"
+  when:
+    - not (port_reused_from_quadlet | default(false))
+    - port_matches is defined
+    - port_matches | length > 0
+    - port_num != ""
+    - (port_num | int) >= (port_range_start | int)
+    - (port_num | int) <= (port_range_end | int)
+
+- name: Set empty list if no existing ports found
+  ansible.builtin.set_fact:
+    existing_ports: []
+  when:
+    - existing_ports is not defined
+    - not (port_reused_from_quadlet | default(false))
+
+- name: Find first available port in range
+  ansible.builtin.set_fact:
+    dev_server_port: "{{ item }}"
+  loop: "{{ range(port_range_start | int, port_range_end | int + 1) | list }}"
+  when:
+    - dev_server_port is not defined or dev_server_port is none
+    - item not in (existing_ports | default([]))
+    - not (port_reused_from_quadlet | default(false))
+  delegate_to: localhost
+  run_once: true
+
+- name: Fail if port range exhausted
+  ansible.builtin.fail:
+    msg: "Port range {{ port_range_start }}-{{ port_range_end }} is exhausted. Cannot assign port {{ dev_server_port }} to user {{ username }}"
+  when: dev_server_port | int > port_range_end | int
+
+- name: Fail if port is below range
+  ansible.builtin.fail:
+    msg: "Port {{ dev_server_port }} is below the allowed range {{ port_range_start }}-{{ port_range_end }}"
+  when: dev_server_port | int < port_range_start | int
+
+# Verify the selected port is not already in use by any process
+# Skip this check if we're reusing a port from an existing quadlet
+- name: Check if selected port is already in use
+  ansible.builtin.command: ss -tln
+  register: port_check_ss_final
+  changed_when: false
+  when: not (port_reused_from_quadlet | default(false))
+
+- name: Check if port is in use (excluding user's existing container)
+  ansible.builtin.set_fact:
+    port_in_use: "{{ port_check_ss_final.stdout | regex_search(':' ~ (dev_server_port | string) ~ '\\s') is not none }}"
+  when: not (port_reused_from_quadlet | default(false))
+
+- name: Verify port is available
+  ansible.builtin.fail:
+    msg: "Port {{ dev_server_port }} is already in use by another process. Please choose a different port or stop the process using this port."
+  when:
+    - not (port_reused_from_quadlet | default(false))
+    - port_in_use | bool
+    - not (user_quadlet_exists.stat.exists | default(false) and user_existing_port is defined and user_existing_port | int == dev_server_port | int)
+
+- name: Display assigned port
+  ansible.builtin.debug:
+    msg: "{{ 'Reusing port' if port_reused_from_quadlet | default(false) else 'Assigned port' }} {{ dev_server_port }} for user {{ username }}"
+...

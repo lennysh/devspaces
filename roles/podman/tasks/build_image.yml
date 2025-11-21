@@ -1,0 +1,204 @@
+---
+# Determine container build source path
+- name: Set container build source path
+  ansible.builtin.set_fact:
+    _container_build_source: >-
+      {%- if podman_build_source_path is defined and podman_build_source_path is not none and podman_build_source_path | length > 0 -%}
+        {{ podman_build_source_path }}
+      {%- elif role_path is defined and role_path is not none -%}
+        {{ role_path }}/files/container-ansible-dev-space
+      {%- elif playbook_dir is defined and playbook_dir is not none -%}
+        {{ playbook_dir }}/../containers/ansible-dev-space
+      {%- else -%}
+        ""
+      {%- endif -%}
+
+- name: Build search paths list for Containerfile
+  ansible.builtin.set_fact:
+    _search_paths: "{{ _search_paths | default([]) + [item] }}"
+  loop:
+    - "{{ role_path }}/files"
+    - "{{ playbook_dir }}"
+    - "."
+  when:
+    - _container_build_source == "" or _container_build_source is none
+    - item is defined
+    - item != ""
+
+- name: Try to find Containerfile in common locations
+  ansible.builtin.find:
+    paths: "{{ _search_paths | default([]) }}"
+    patterns:
+      - "**/container-ansible-dev-space/Containerfile"
+      - "**/containers/ansible-dev-space/Containerfile"
+    file_type: file
+  register: containerfile_search
+  when:
+    - _container_build_source == "" or _container_build_source is none
+    - _search_paths is defined
+    - _search_paths | length > 0
+
+- name: Set container build source path from found Containerfile
+  ansible.builtin.set_fact:
+    _container_build_source: "{{ containerfile_search.files[0].path | dirname }}"
+  when:
+    - _container_build_source == "" or _container_build_source is none
+    - containerfile_search is defined
+    - containerfile_search.matched > 0
+
+- name: Debug path resolution
+  ansible.builtin.debug:
+    msg:
+      - "Path resolution debug:"
+      - "  podman_build_source_path: {{ podman_build_source_path | default('NOT SET') }}"
+      - "  role_path: {{ role_path | default('NOT SET') }}"
+      - "  playbook_dir: {{ playbook_dir | default('NOT SET') }}"
+      - "  _container_build_source: {{ _container_build_source | default('NOT SET') }}"
+  when: _container_build_source == "" or _container_build_source is none
+
+- name: Fail if container build source path is not set
+  ansible.builtin.fail:
+    msg: |
+      Container build source path is not set and could not be auto-detected.
+      Please set podman_build_source_path to the path of the container build directory.
+      Example: -e "podman_build_source_path=/path/to/container-ansible-dev-space"
+  when: _container_build_source == "" or _container_build_source is none
+
+# Verify container build source exists (on control node, no sudo needed)
+- name: Check if container build source exists
+  ansible.builtin.stat:
+    path: "{{ _container_build_source }}"
+  register: container_build_source_stat
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Check if context directory exists in build source
+  ansible.builtin.stat:
+    path: "{{ _container_build_source }}/context"
+  register: context_dir_stat
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Fail if container build source does not exist
+  ansible.builtin.fail:
+    msg: |
+      Container build source directory not found: {{ _container_build_source }}
+      Please set podman_build_source_path to the correct path, or ensure the container-ansible-dev-space
+      directory exists in the role's files directory.
+  when: not container_build_source_stat.stat.exists
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Fail if context directory does not exist
+  ansible.builtin.fail:
+    msg: |
+      Context directory not found in: {{ _container_build_source }}/context
+      Please ensure the container build directory contains a context/ subdirectory with the build files.
+  when: not context_dir_stat.stat.exists
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+# Delete existing image if force rebuild is requested
+- name: Delete existing image for force rebuild
+  ansible.builtin.command:
+    cmd: podman rmi "{{ podman_build_image_name }}" || true
+  register: image_delete_result
+  changed_when: image_delete_result.rc == 0
+  failed_when: false
+  when: podman_build_force_rebuild | default(false) | bool
+
+# Check if image already exists (on remote host)
+- name: Check if container image already exists
+  ansible.builtin.command:
+    cmd: podman image exists "{{ podman_build_image_name }}"
+  register: image_check
+  changed_when: false
+  failed_when: false
+
+- name: Block | Container build | Start
+  when: image_check.rc != 0
+  block:
+    # Discover latest code-server version if "latest" is specified
+    - name: Discover latest code-server version
+      ansible.builtin.set_fact:
+        podman_build_code_server_version: >-
+          {{
+            (lookup('url', 'https://api.github.com/repos/coder/code-server/releases/latest',
+                    headers=_github_api_headers, split_lines=False) | from_json).get('tag_name')
+            | replace('v', '')
+          }}
+      when: podman_build_code_server_version == "latest"
+      delegate_to: localhost
+      become: false
+      run_once: true
+      until: podman_build_code_server_version is version('0.0.0', '>=')
+      retries: 10
+
+    # Copy container build files to temporary location on remote host
+    - name: Create temporary directory for container build
+      ansible.builtin.file:
+        path: "/tmp/podman-build-{{ ansible_date_time.epoch }}"
+        state: directory
+        mode: "0755"
+      register: build_temp_dir
+
+    - name: Copy container build files to remote host
+      ansible.builtin.copy:
+        src: "{{ _container_build_source }}/"
+        dest: "{{ build_temp_dir.path }}/"
+        mode: preserve
+
+    - name: Template Containerfile to remote host (overwrites existing Containerfile)
+      ansible.builtin.template:
+        src: Containerfile.j2
+        dest: "{{ build_temp_dir.path }}/Containerfile"
+        mode: "0644"
+
+    # Set SELinux context if needed
+    - name: Set SELinux context on build context files
+      ansible.builtin.command:
+        cmd: chcon -R -t container_file_t "{{ build_temp_dir.path }}/context"
+      when:
+        - podman_build_set_selinux_context | bool
+        - ansible_selinux.status == "enabled"
+      changed_when: true
+      failed_when: false
+
+    # Build the container image
+    # The Containerfile expects the build context to be the context/ directory
+    # Use --rm to remove intermediate containers after successful build
+    # Use --squash to squash all layers into one to avoid intermediate images
+    - name: Build container image
+      ansible.builtin.command:
+        cmd: podman build --rm --squash -f "{{ build_temp_dir.path }}/Containerfile" -t "{{ podman_build_image_name }}" "{{ build_temp_dir.path }}/context"
+      register: image_build_result
+      changed_when: true
+
+    # Clean up dangling images (--squash prevents intermediate images, so only dangling remain)
+    - name: Prune dangling images
+      ansible.builtin.command:
+        cmd: podman image prune -f
+      when: podman_build_cleanup_intermediate | bool
+      changed_when: true
+      failed_when: false
+
+    # Clean up temporary build directory
+    - name: Remove temporary build directory
+      ansible.builtin.file:
+        path: "{{ build_temp_dir.path }}"
+        state: absent
+
+- name: Display message if image already exists
+  ansible.builtin.debug:
+    msg: "Container image {{ podman_build_image_name }} already exists. Skipping build."
+  when: image_check.rc == 0
+
+- name: Display image build result
+  ansible.builtin.debug:
+    msg: "Container image {{ podman_build_image_name }} is ready"
+  when: image_build_result is defined
+...

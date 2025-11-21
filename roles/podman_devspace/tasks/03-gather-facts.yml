@@ -1,0 +1,24 @@
+---
+- name: Get inventory hostname
+  ansible.builtin.set_fact:
+    devspace_hostname: "{{ inventory_hostname }}"
+
+- name: Set final connection URL
+  ansible.builtin.set_fact:
+    podman_devspace_url: "https://{{ devspace_hostname }}:{{ dev_server_port }}/?folder=/home/{{ username }}/devspace"
+
+- name: Display devspace access information
+  ansible.builtin.debug:
+    msg:
+      - "=========================================="
+      - "Podman Devspace deployment completed successfully!"
+      - "=========================================="
+      - "User: {{ username }}"
+      - "Access URL: {{ podman_devspace_url }}"
+      - "Port: {{ dev_server_port }}"
+      - "Container: {{ podman_devspace_container_name_prefix }}-{{ username }}"
+      - "=========================================="
+      - "Note: If using a password, use: {{ code_server_pass | default('No password set - authentication disabled') }}"
+      - "=========================================="
+      - "Manage with: systemctl --user status {{ podman_devspace_container_name_prefix }}-{{ username }}.service"
+...

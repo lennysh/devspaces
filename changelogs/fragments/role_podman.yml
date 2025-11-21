@@ -1,0 +1,4 @@
+---
+major_changes:
+- Added the `podman` role to install podman container runtime system-wide on the target host and optionally builds the container image for use with `podman_devspace` role.
+- Added the `podman_devspace` role to configure a development environment for a specific user using a Podman container with code-server.

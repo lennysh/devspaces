@@ -1,0 +1,19 @@
+---
+# User configuration
+username:
+# Container image configuration
+podman_devspace_image: "quay.io/lshirley/ansible-dev-space:latest"
+
+# Port configuration - if dev_server_port is not set, will auto-assign next available port
+dev_server_port:
+# Port range for automatic port assignment
+port_range_start: 8080
+port_range_end: 8099
+
+# Password for code-server (if your image supports it via ENV)
+# RECOMMEND: Pass this in as an extra_var or vault var for security
+code_server_pass:
+
+# Container name prefix
+podman_devspace_container_name_prefix: "code-server"
+...

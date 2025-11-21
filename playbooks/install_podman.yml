@@ -1,0 +1,31 @@
+---
+# Playbook: Install Podman
+#
+# This playbook installs podman container runtime system-wide on target hosts.
+# It also installs python3-firewall (required for ansible.posix.firewalld module).
+# By default, it also builds the container image (quay.io/lshirley/ansible-dev-space:latest).
+#
+# Usage:
+#   ansible-playbook -i inventory playbooks/install_podman.yml
+#
+#   Skip image building:
+#   ansible-playbook -i inventory playbooks/install_podman.yml -e "podman_build_image=false"
+#
+#   Target specific hosts:
+#   ansible-playbook -i inventory playbooks/install_podman.yml --limit dev_servers
+
+- name: Install Podman
+  hosts: all
+  become: true
+  roles:
+    - role: lennysh.devspaces.podman
+
+  post_tasks:
+    - name: Display installation summary
+      ansible.builtin.debug:
+        msg:
+          - "Podman installation completed"
+          - "Installed packages: podman, python3-firewall"
+          - "Container image built: quay.io/lshirley/ansible-dev-space:latest (if podman_build_image=true)"
+          - "Next step: Run deploy_podman_devspace.yml to configure a user devspace"
+...

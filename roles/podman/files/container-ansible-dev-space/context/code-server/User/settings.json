@@ -1,0 +1,23 @@
+{
+    "ansible.ansible.useFullyQualifiedCollectionNames": true,
+    "ansible.executionEnvironment.enabled": false,
+    "ansible.executionEnvironment.image": "registry.redhat.io/ansible-automation-platform-26/ee-supported-rhel9:latest",
+    "files.associations": {
+        "*.yml": "ansible",
+        "*.yaml": "ansible"
+    },
+    "files.autoSave": "afterDelay",
+    "editor.tabSize": 2,
+    "git.autofetch": true,
+    "git.autorefresh": true,
+    "git.confirmSync": false,
+    "git.enableSmartCommit": true,
+    "git.ignoreLegacyWarning": true,
+    "redhat.telemetry.enabled": false,
+    "search.smartCase": true,
+    "security.workspace.trust.untrustedFiles": "open",
+    "telemetry.telemetryLevel": "off",
+    "window.menuBarVisibility": "visible",
+    "workbench.colorTheme": "Default Dark Modern",
+    "workbench.tips.enabled": false
+}
